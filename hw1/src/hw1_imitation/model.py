@@ -46,13 +46,24 @@ class MSEPolicy(BasePolicy):
         hidden_dims: tuple[int, ...] = (128, 128),
     ) -> None:
         super().__init__(state_dim, action_dim, chunk_size)
+        layers = []
+        dim = state_dim
+        for i in  range(0,len(hidden_dims)):
+            layers.append(nn.Linear(dim,hidden_dims[i]))
+            layers.append(nn.ReLU())
+            dim = hidden_dims[i]
+        layers.append(nn.Linear(dim,chunk_size * action_dim))
+        self.mlp = nn.Sequential(*layers)
 
     def compute_loss(
         self,
         state: torch.Tensor,
         action_chunk: torch.Tensor,
     ) -> torch.Tensor:
-        raise NotImplementedError
+        pred_chunk = self.mlp(state).reshape(
+            -1, self.chunk_size, self.action_dim
+        )
+        return torch.mean((pred_chunk - action_chunk) ** 2)
 
     def sample_actions(
         self,
@@ -60,7 +71,10 @@ class MSEPolicy(BasePolicy):
         *,
         num_steps: int = 10,
     ) -> torch.Tensor:
-        raise NotImplementedError
+        # raise NotImplementedError
+        with torch.no_grad():
+            chunks = self.mlp(state) # B K C
+            return chunks.reshape(-1,self.chunk_size,self.action_dim)
 
 
 class FlowMatchingPolicy(BasePolicy):
